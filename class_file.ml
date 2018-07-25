@@ -61,7 +61,7 @@ type constant =
 | CLong
 | CDouble
 | CNameAndType
-| CUtf8 of int * int list
+| CUtf8 of Stdint.uint16 * Stdint.uint8 list
 | CMethodHandle
 | CMethodType
 | CInvokeDynamic
@@ -84,7 +84,7 @@ let try_get_constant = function
   | 1 :: x :: y :: r -> 
     let len = x lsl 8 + y in
     let (str, r) = r |> List.part len in
-    (CUtf8 (len, str), r) |> Ok
+    (CUtf8 (Stdint.Uint16.of_int len, str |> List.map Stdint.Uint8.of_int), r) |> Ok
   | 3 :: _x -> failwith "todo"
   | x :: _ -> Printf.sprintf "usnuported constant tag = %i" x |> Error
   | [] ->Error "usnuported constant tag = <empty stream of data>"
