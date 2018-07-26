@@ -33,7 +33,6 @@ let get_4u = cont (function
 
 type class_name = ClassName of string
 
-open Stdint
 
 type _ baseType =
 | BtByte : bytes baseType
@@ -47,24 +46,44 @@ type _ baseType =
 | BtReference : class_name -> objectref baseType
 | BtArrayReference : arrayref baseType
 
-type len = int (*u2*)
-type str = int list (*u1 list*)
+type len = Stdint.uint16
+type str = Stdint.uint8 list
+type index = Stdint.uint16
+type name_index = index
+type class_index = index
+type name_and_type_index = index
+type string_index = index
+type descriptor_index = index
+type reference_index = index
+type bootstrap_method_attr_index = index
+
+type reference_kind = 
+| REF_getField 
+| REF_getStatic
+| REF_putField
+| REF_putStatic
+| REF_invokeVirtual
+| REF_invokeStatic
+| REF_invokeSpecial
+| REF_newInvokeSpecial
+| REF_invokeInterface
+
 
 type constant =
-| CClass 
-| CFiledRef
-| CMethodRef
-| CInterfaceMethodRef
-| CString
-| CInteger
-| CFloat
-| CLong
-| CDouble
-| CNameAndType
-| CUtf8 of Stdint.uint16 * Stdint.uint8 list
-| CMethodHandle
-| CMethodType
-| CInvokeDynamic
+| CClass of name_index
+| CFiledRef of class_index * name_and_type_index
+| CMethodRef of class_index * name_and_type_index
+| CInterfaceMethodRef of class_index * name_and_type_index
+| CString of string_index
+| CInteger of int32
+| CFloat of float
+| CLong of int64
+| CDouble of float (* this is 63bit type - should be 64... *)
+| CNameAndType of name_index * descriptor_index
+| CUtf8 of string
+| CMethodHandle of reference_kind * reference_index
+| CMethodType of descriptor_index
+| CInvokeDynamic of bootstrap_method_attr_index * name_and_type_index
 
 module List = struct
   include List
@@ -84,7 +103,8 @@ let try_get_constant = function
   | 1 :: x :: y :: r -> 
     let len = x lsl 8 + y in
     let (str, r) = r |> List.part len in
-    (CUtf8 (Stdint.Uint16.of_int len, str |> List.map Stdint.Uint8.of_int), r) |> Ok
+    (* (CUtf8 (Stdint.Uint16.of_int len, str |> List.map Stdint.Uint8.of_int), r) |> Ok *)
+    failwith "todo"
   | 3 :: _x -> failwith "todo"
   | x :: _ -> Printf.sprintf "usnuported constant tag = %i" x |> Error
   | [] ->Error "usnuported constant tag = <empty stream of data>"
