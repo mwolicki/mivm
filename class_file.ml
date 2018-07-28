@@ -99,13 +99,32 @@ end
 
 let (||>) (a:'a*'b) f = f a
 
+let get_int16 a b = a lsl 8 + b
+let get_uint16 a b = get_int16 a b |> Stdint.Uint16.of_int (*TODO fix*)
+let get_int32 a b c d = 
+    let (!@) = Int32.of_int in
+    let (>>) = Int32.shift_left in
+    let (+) = Int32.add in
+    ((!@a >> 24) + (!@b >> 16) + (!@c >> 8) + !@d)
+
+let get_int64 a b c d e f g h = 
+    let (!@) = Int64.of_int in
+    let (>>) = Int64.shift_left in
+    let (+) = Int64.add in
+    ((!@a >> 56) + (!@b >> 48) + (!@c >> 40) + (!@d >> 32) + (!@e >> 24) + (!@f >> 16) + (!@g >> 8) + !@h)
+
 let try_get_constant = function
   | 1 :: x :: y :: r -> 
-    let len = x lsl 8 + y in
+    let len = get_int16 x y in
     let (str, r) = r |> List.part len in
-    (* (CUtf8 (Stdint.Uint16.of_int len, str |> List.map Stdint.Uint8.of_int), r) |> Ok *)
-    failwith "todo"
-  | 3 :: _x -> failwith "todo"
+    (* this mapping will work only for non-null ASCII chars! *)
+    (str |> List.map Char.chr |> List.to_seq |> String.of_seq |> CUtf8, r) |> Ok
+
+  | 3:: a :: b :: c :: d :: r -> Ok (get_int32 a b c d |> CInteger, r)
+  | 4:: _a :: _b :: _c :: _d :: r -> Ok (CFloat 0.0, r) (* TODO *)
+  | 5:: a :: b :: c :: d :: e :: f :: g :: h :: r -> Ok (get_int64 a b c d e f g h |> CLong, r)
+  | 6:: _a :: _b :: _c :: _d :: _e :: _f :: _g :: _h :: r -> Ok (CDouble 0.0, r)  (* TODO *)
+  | 7:: a :: b :: r -> Ok (get_uint16 a b |> CClass, r)
   | x :: _ -> Printf.sprintf "usnuported constant tag = %i" x |> Error
   | [] ->Error "usnuported constant tag = <empty stream of data>"
 
