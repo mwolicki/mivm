@@ -45,16 +45,8 @@ type _ baseType =
 | BtArrayReference : arrayref baseType
 *)
 
-type base_type =
-| BtByte
-| BtChar
-| BtDouble
-| BtFloat 
-| BtInteger
-| BtLong
-| BtShort
-| BtBoolean
-[@@deriving show]
+type base_type = BtByte | BtChar | BtDouble | BtFloat  | BtInteger | BtLong | BtShort | BtBoolean
+                [@@deriving show]
 
 
 
@@ -70,23 +62,10 @@ type descriptor_index = index [@@deriving show]
 type reference_index = index [@@deriving show]
 type bootstrap_method_attr_index = index [@@deriving show]
 
-type reference_kind = 
-| REF_getField 
-| REF_getStatic
-| REF_putField
-| REF_putStatic
-| REF_invokeVirtual
-| REF_invokeStatic
-| REF_invokeSpecial
-| REF_newInvokeSpecial
-| REF_invokeInterface
-[@@deriving show]
+type reference_kind =  REF_getField  | REF_getStatic | REF_putField | REF_putStatic | REF_invokeVirtual | REF_invokeStatic
+                     | REF_invokeSpecial | REF_newInvokeSpecial | REF_invokeInterface [@@deriving show]
 
-type java_type =
-| JTObject of class_name
-| JTArray of java_type
-| JTBase of base_type
-[@@deriving show]
+type java_type = JTObject of class_name | JTArray of java_type | JTBase of base_type [@@deriving show]
 
 
 let string_to_java_type str =
