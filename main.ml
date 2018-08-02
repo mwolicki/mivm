@@ -55,6 +55,16 @@ type file_version = {
 }
 
 let () =
-  read_file "/Users/kevin/_projects/java/HelloWorld.class" 
-  |> parse_class_file
-  |> function Ok _x -> print_endline "x" | Error x -> print_endline x
+
+  let path = "/Users/kevin/_projects/java" in
+  let files = Sys.readdir path
+    |> Array.to_list
+    |> List.filter (fun x->(Filename.extension x) = ".class")
+    |> List.map (Filename.concat path)
+  in 
+    files 
+    |> List.iter (fun file ->
+          Printf.printf "\n\n#####################\n\nparsing file %s\n\n#####################\n\n" file;
+          read_file file
+          |> parse_class_file
+          |> function Ok _x -> print_endline "x" | Error x -> print_endline x)

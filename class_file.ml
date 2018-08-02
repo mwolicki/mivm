@@ -80,6 +80,8 @@ type constant =
 | CLong of int64
 | CDouble of float (* this is 63bit type - should be 64... *)
 | CNameAndType of name_index * descriptor_index
+| CModule of name_index
+| CPackage of name_index
 | CUtf8 of string
 | CMethodHandle of reference_kind * reference_index
 | CMethodType of descriptor_index
@@ -109,6 +111,10 @@ let to_str_constant = function
     Printf.sprintf "CDouble %f" float
 | CNameAndType (name_index, descriptor_index) -> 
     Printf.sprintf "CNameAndType (name_index = %d, descriptor_index = %d)" (as_int name_index) (as_int descriptor_index)
+| CModule name_index -> 
+    Printf.sprintf "CModule (name_index = %d,)" (as_int name_index)
+| CPackage name_index -> 
+    Printf.sprintf "CPackage (name_index = %d,)" (as_int name_index)
 | CUtf8 s -> 
     Printf.sprintf "CUtf8 %s" s
 | CMethodHandle (_reference_kind, reference_index) -> 
@@ -180,8 +186,10 @@ let try_get_constant = function
     | None -> Printf.sprintf "unknown kind = %i" kind' |> Error end
   | 16:: a :: b :: r -> Ok (`CMethodType(get_uint16 a b), r)
   | 18:: a :: b :: d :: e :: r -> Ok (`CInvokeDynamic(get_uint16 a b, get_uint16 d e), r)
+  | 19:: a :: b :: r -> Ok (`CModule(get_uint16 a b), r)
+  | 20:: a :: b :: r -> Ok (`CPackage(get_uint16 a b), r)
   | x :: _ -> 
-    Printf.sprintf "usnuported constant tag = %i" x |> Error
+    Printf.sprintf "unsuported constant tag = %i" x |> Error
   | [] ->Error "usnuported constant tag = <empty stream of data>"
 
 let try_get_constants no (data:int list) =
@@ -232,6 +240,8 @@ let try_get_constants no (data:int list) =
                 | `CMethodHandle (a,b) -> CMethodHandle (a,b)
                 | `CInvokeDynamic (a,b) -> CInvokeDynamic (a,b)
                 | `CMethodType x -> CMethodType x
+                | `CModule x -> CModule x
+                | `CPackage x -> CPackage x
                 | `Null -> CEmpty)
             |> fun x ->  Ok (x, remaining)
         | Error e -> Error e
