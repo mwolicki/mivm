@@ -65,10 +65,10 @@ type bootstrap_method_attr_index = index [@@deriving show]
 type reference_kind =  REF_getField  | REF_getStatic | REF_putField | REF_putStatic | REF_invokeVirtual | REF_invokeStatic
                      | REF_invokeSpecial | REF_newInvokeSpecial | REF_invokeInterface [@@deriving show]
 
-type java_type = JTObject of class_name | JTArray of java_type | JTBase of base_type [@@deriving show]
+type class_type = JTObject of class_name | JTArray of class_type | JTBase of base_type [@@deriving show]
 
 
-let string_to_java_type str =
+let string_to_class_type str =
     let list_to_string l = List.to_seq l |> String.of_seq  in
     let rec array_to_java_type = function
         | '[' :: xs -> array_to_java_type xs |> JTArray
@@ -90,7 +90,7 @@ let string_to_java_type str =
     in string_to_java_type (String.to_seq str |> List.of_seq)
 
 type constant =
-| CClass of java_type
+| CClass of class_type
 | CFiledRef of class_index * name_and_type_index
 | CMethodRef of class_index * name_and_type_index
 | CInterfaceMethodRef of class_index * name_and_type_index
@@ -218,7 +218,7 @@ let try_get_constants no (data:int list) =
                 | `CFloat x -> CFloat x
                 | `CLong x -> CLong x
                 | `CDouble x -> CDouble x
-                | `CClass x -> CClass (string_to_java_type (get_string_from_map x))
+                | `CClass x -> CClass (string_to_class_type (get_string_from_map x))
                 | `CString x -> CString (get_string_from_map x)
                 | `CFiledRef (a,b) -> CFiledRef (a,b)
                 | `CMethodRef (a,b) -> CMethodRef (a,b)
