@@ -1,5 +1,3 @@
-open Types
-
 let read_file path : int list =
     let file = open_in_bin path in
     let data = ref [] in
@@ -31,9 +29,9 @@ let get_4u = cont (function
   | _ -> None)
 
 
-type class_name = ClassName of string
+type class_name = ClassName of string [@@deriving show]
 
-
+(*
 type _ baseType =
 | BtByte : bytes baseType
 | BtChar : char baseType
@@ -45,17 +43,32 @@ type _ baseType =
 | BtBoolean : bool baseType
 | BtReference : class_name -> objectref baseType
 | BtArrayReference : arrayref baseType
+*)
+
+type base_type =
+| BtByte
+| BtChar
+| BtDouble
+| BtFloat 
+| BtInteger
+| BtLong
+| BtShort
+| BtBoolean
+[@@deriving show]
+
+
 
 type len = Stdint.uint16
 type str = Stdint.uint8 list
-type index = Stdint.uint16
-type name_index = index
-type class_index = index
-type name_and_type_index = index
-type string_index = index
-type descriptor_index = index
-type reference_index = index
-type bootstrap_method_attr_index = index
+type index = Stdint.uint16 [@printer fun fmt x -> fprintf fmt "%s" (Stdint.Uint16.to_string x)][@@deriving show]
+
+type name_index = index [@@deriving show]
+type class_index = index [@@deriving show]
+type name_and_type_index = index [@@deriving show]
+type string_index = index [@@deriving show]
+type descriptor_index = index [@@deriving show]
+type reference_index = index [@@deriving show]
+type bootstrap_method_attr_index = index [@@deriving show]
 
 type reference_kind = 
 | REF_getField 
@@ -67,10 +80,38 @@ type reference_kind =
 | REF_invokeSpecial
 | REF_newInvokeSpecial
 | REF_invokeInterface
+[@@deriving show]
 
+type java_type =
+| JTObject of class_name
+| JTArray of java_type
+| JTBase of base_type
+[@@deriving show]
+
+
+let string_to_java_type str =
+    let list_to_string l = List.to_seq l |> String.of_seq  in
+    let rec array_to_java_type = function
+        | '[' :: xs -> array_to_java_type xs |> JTArray
+        | 'L' :: xs -> 
+            list_to_string xs |> ClassName |> JTObject
+        | ['B'] -> JTBase BtByte
+        | ['C'] -> JTBase BtChar
+        | ['D'] -> JTBase BtDouble
+        | ['F'] -> JTBase BtFloat
+        | ['I'] -> JTBase BtInteger
+        | ['J'] -> JTBase BtLong
+        | ['S'] -> JTBase BtShort
+        | ['Z'] -> JTBase BtBoolean
+        | [] -> failwith (Printf.sprintf "string_to_java_type empty string - %s" str)
+        | x -> failwith (Printf.sprintf "string_to_java_type unknown type - '%s' ('%s')" (list_to_string x) str) in
+    let string_to_java_type = function
+    | '[' :: xs -> array_to_java_type xs |> JTArray
+    | _ -> JTObject (ClassName str)
+    in string_to_java_type (String.to_seq str |> List.of_seq)
 
 type constant =
-| CClass of string
+| CClass of java_type
 | CFiledRef of class_index * name_and_type_index
 | CMethodRef of class_index * name_and_type_index
 | CInterfaceMethodRef of class_index * name_and_type_index
@@ -87,43 +128,10 @@ type constant =
 | CMethodType of descriptor_index
 | CInvokeDynamic of bootstrap_method_attr_index * name_and_type_index
 | CEmpty
-
+[@@deriving show]
 let as_int = Stdint.Uint16.to_int
 
-let to_str_constant = function
-| CClass name_index -> 
-    Printf.sprintf "CClass (name_index = %s)" (name_index)
-| CFiledRef (class_index, name_and_type_index) -> 
-    Printf.sprintf "CFiledRef (class_index = %i, name_and_type_index = %i)" (as_int class_index) (as_int name_and_type_index)
-| CMethodRef (class_index, name_and_type_index) -> 
-    Printf.sprintf "CMethodRef (class_index = %d, name_and_type_index %d)" (as_int class_index) (as_int name_and_type_index)
-| CInterfaceMethodRef (class_index, name_and_type_index) -> 
-    Printf.sprintf "CInterfaceMethodRef (class_index = %d, name_and_type_index %d)" (as_int class_index) (as_int name_and_type_index)
-| CString str -> 
-    Printf.sprintf "CString (str = %s)" str
-| CInteger int32 -> 
-    Printf.sprintf "CInteger %s" (Int32.to_string int32)
-| CFloat float -> 
-    Printf.sprintf "CFloat %f" float
-| CLong int64 -> 
-    Printf.sprintf "CLong %s" (Int64.to_string int64)
-| CDouble float  -> 
-    Printf.sprintf "CDouble %f" float
-| CNameAndType (name_index, descriptor_index) -> 
-    Printf.sprintf "CNameAndType (name_index = %d, descriptor_index = %d)" (as_int name_index) (as_int descriptor_index)
-| CModule name_index -> 
-    Printf.sprintf "CModule (name_index = %d,)" (as_int name_index)
-| CPackage name_index -> 
-    Printf.sprintf "CPackage (name_index = %d,)" (as_int name_index)
-| CUtf8 s -> 
-    Printf.sprintf "CUtf8 %s" s
-| CMethodHandle (_reference_kind, reference_index) -> 
-    Printf.sprintf "CMethodHandle (KIND, reference_index = %d)"  (as_int reference_index)
-| CMethodType descriptor_index -> 
-    Printf.sprintf "CMethodType descriptor_index = %d" (as_int descriptor_index)
-| CInvokeDynamic (bootstrap_method_attr_index, name_and_type_index) -> 
-    Printf.sprintf "CInvokeDynamic (bootstrap_method_attr_index = %d, name_and_type_index = %d)" (as_int bootstrap_method_attr_index) (as_int name_and_type_index)
-| CEmpty -> "CEmpty"
+
 module List = struct
   include List
   let part i =
@@ -231,7 +239,7 @@ let try_get_constants no (data:int list) =
                 | `CFloat x -> CFloat x
                 | `CLong x -> CLong x
                 | `CDouble x -> CDouble x
-                | `CClass x -> CClass (get_string_from_map x)
+                | `CClass x -> CClass (string_to_java_type (get_string_from_map x))
                 | `CString x -> CString (get_string_from_map x)
                 | `CFiledRef (a,b) -> CFiledRef (a,b)
                 | `CMethodRef (a,b) -> CMethodRef (a,b)
@@ -262,5 +270,5 @@ let parse_class_file x =
       Ok rem))
   |> get_2u "missing const_pool_count" (fun constant_pool_count rem -> 
         match try_get_constants (constant_pool_count - 1) rem with
-        | Ok (x, _) -> x |> Core.Int.Map.data |> List.map to_str_constant |> String.concat "\n" |> Error
+        | Ok (x, _) -> x |> Core.Int.Map.data |> List.map show_constant |> String.concat "\n" |> Error
         | Error x -> Error x)

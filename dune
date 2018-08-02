@@ -1,5 +1,5 @@
 (executable
  (name main)
- (libraries core camlzip stdint)
- (preprocess (pps ppx_jane ocaml-monadic))
+ (libraries core camlzip stdint ppx_deriving)
+ (preprocess (pps ppx_jane ocaml-monadic ppx_deriving.show))
  )
