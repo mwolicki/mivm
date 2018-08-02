@@ -150,18 +150,18 @@ let try_get_constant = function
     let len = get_int16 x y in
     let (str, r) = r |> List.part len in
     (* this mapping will work only for non-null ASCII chars! *)
-    (str |> List.map Char.chr |> List.to_seq |> String.of_seq |> CUtf8, r) |> Ok
+    (`CUtf8 (str |> List.map Char.chr |> List.to_seq |> String.of_seq), r) |> Ok
 
-  | 3:: a :: b :: c :: d :: r -> Ok (get_int32 a b c d |> CInteger, r)
-  | 4:: _a :: _b :: _c :: _d :: r -> Ok (CFloat 0.0, r) (* TODO *)
-  | 5:: a :: b :: c :: d :: e :: f :: g :: h :: r -> Ok (get_int64 a b c d e f g h |> CLong, r)
-  | 6:: _a :: _b :: _c :: _d :: _e :: _f :: _g :: _h :: r -> Ok (CDouble 0.0, r)  (* TODO *)
-  | 7:: a :: b :: r -> Ok (get_uint16 a b |> CClass, r)
-  | 8:: a :: b :: r -> Ok (get_uint16 a b |> CString, r)
-  | 9:: a :: b :: d :: e :: r -> Ok (CFiledRef(get_uint16 a b, get_uint16 d e), r)
-  | 10:: a :: b :: d :: e :: r -> Ok (CMethodRef(get_uint16 a b, get_uint16 d e), r)
-  | 11:: a :: b :: d :: e :: r -> Ok (CInterfaceMethodRef(get_uint16 a b, get_uint16 d e), r)
-  | 12:: a :: b :: d :: e :: r -> Ok (CNameAndType(get_uint16 a b, get_uint16 d e), r)
+  | 3:: a :: b :: c :: d :: r -> Ok (`CInteger (get_int32 a b c d), r)
+  | 4:: _a :: _b :: _c :: _d :: r -> Ok (`CFloat 0.0, r) (* TODO *)
+  | 5:: a :: b :: c :: d :: e :: f :: g :: h :: r -> Ok (`CLong(get_int64 a b c d e f g h), r)
+  | 6:: _a :: _b :: _c :: _d :: _e :: _f :: _g :: _h :: r -> Ok (`CDouble 0.0, r)  (* TODO *)
+  | 7:: a :: b :: r -> Ok (`CClass (get_uint16 a b), r)
+  | 8:: a :: b :: r -> Ok (`CString(get_uint16 a b), r)
+  | 9:: a :: b :: d :: e :: r -> Ok (`CFiledRef(get_uint16 a b, get_uint16 d e), r)
+  | 10:: a :: b :: d :: e :: r -> Ok (`CMethodRef(get_uint16 a b, get_uint16 d e), r)
+  | 11:: a :: b :: d :: e :: r -> Ok (`CInterfaceMethodRef(get_uint16 a b, get_uint16 d e), r)
+  | 12:: a :: b :: d :: e :: r -> Ok (`CNameAndType(get_uint16 a b, get_uint16 d e), r)
   | 15:: kind' :: a :: b :: r -> 
     let kind = match kind' with
                | 1 -> Some REF_getField
@@ -175,22 +175,44 @@ let try_get_constant = function
                | 9 -> Some REF_invokeInterface
                | _ -> None               
     in begin match kind with
-    | Some kind -> Ok (CMethodHandle(kind, get_uint16 a b), r)
+    | Some kind -> Ok (`CMethodHandle(kind, get_uint16 a b), r)
     | None -> Printf.sprintf "unknown kind = %i" kind' |> Error end
-  | 16:: a :: b :: r -> Ok (CMethodType(get_uint16 a b), r)
-  | 18:: a :: b :: d :: e :: r -> Ok (CInvokeDynamic(get_uint16 a b, get_uint16 d e), r)
+  | 16:: a :: b :: r -> Ok (`CMethodType(get_uint16 a b), r)
+  | 18:: a :: b :: d :: e :: r -> Ok (`CInvokeDynamic(get_uint16 a b, get_uint16 d e), r)
   | x :: _ -> Printf.sprintf "usnuported constant tag = %i" x |> Error
   | [] ->Error "usnuported constant tag = <empty stream of data>"
 
-
-let rec try_get_constants no (data:int list) =
-    if no = 0 then Ok([], data)
-    else
-        match try_get_constant data with
+let try_get_constants no (data:int list) =
+    let rec try_get_constants no (data:int list) =
+        if no = 0 then Ok([], data)
+        else
+            match try_get_constant data with
+            | Ok (result, remaining) ->
+                begin match try_get_constants (no - 1) remaining with
+                | Ok (tail, remaining) -> Ok (result::tail, remaining)
+                | Error error -> Error error end
+            | Error e -> Error e
+    in 
+        match try_get_constants no data with
         | Ok (result, remaining) ->
-            begin match try_get_constants (no - 1) remaining with
-            | Ok (tail, remaining) -> Ok (result::tail, remaining)
-            | Error error -> Error error end
+            let data = result |> List.mapi (fun i x -> i, x) in
+            let map = Core.Int.Map.of_alist_exn data in
+            Core.Int.Map.map map ~f: (function 
+                | `CUtf8 x -> CUtf8 x
+                | `CInteger x -> CInteger x
+                | `CFloat x -> CFloat x
+                | `CLong x -> CLong x
+                | `CDouble x -> CDouble x
+                | `CClass x -> CClass x
+                | `CString x -> CString x
+                | `CFiledRef (a,b) -> CFiledRef (a,b)
+                | `CMethodRef (a,b) -> CMethodRef (a,b)
+                | `CInterfaceMethodRef (a,b) -> CInterfaceMethodRef (a,b)
+                | `CNameAndType (a,b) -> CNameAndType (a,b)
+                | `CMethodHandle (a,b) -> CMethodHandle (a,b)
+                | `CInvokeDynamic (a,b) -> CInvokeDynamic (a,b)
+                | `CMethodType x -> CMethodType x)
+            |> fun x ->  Ok (x, remaining)
         | Error e -> Error e
         
 (* let base_type_of_char: type a. char -> a baseType option = function
@@ -209,5 +231,5 @@ let parse_class_file x =
       Ok rem))
   |> get_2u "missing const_pool_count" (fun constant_pool_count rem -> 
         match try_get_constants (constant_pool_count - 1) rem with
-        | Ok (x, _) -> x |> List.map to_str_constant |> String.concat ", " |> Error
+        | Ok (x, _) -> x |> Core.Int.Map.to_alist |> List.map (fun (_, x) ->  to_str_constant x) |> String.concat ", " |> Error
         | Error x -> Error x)
