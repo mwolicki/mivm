@@ -70,7 +70,7 @@ type reference_kind =
 
 
 type constant =
-| CClass of name_index
+| CClass of string
 | CFiledRef of class_index * name_and_type_index
 | CMethodRef of class_index * name_and_type_index
 | CInterfaceMethodRef of class_index * name_and_type_index
@@ -84,13 +84,13 @@ type constant =
 | CMethodHandle of reference_kind * reference_index
 | CMethodType of descriptor_index
 | CInvokeDynamic of bootstrap_method_attr_index * name_and_type_index
-
+| CEmpty
 
 let as_int = Stdint.Uint16.to_int
 
 let to_str_constant = function
 | CClass name_index -> 
-    Printf.sprintf "CClass (name_index = %i)" (as_int name_index)
+    Printf.sprintf "CClass (name_index = %s)" (name_index)
 | CFiledRef (class_index, name_and_type_index) -> 
     Printf.sprintf "CFiledRef (class_index = %i, name_and_type_index = %i)" (as_int class_index) (as_int name_and_type_index)
 | CMethodRef (class_index, name_and_type_index) -> 
@@ -117,6 +117,7 @@ let to_str_constant = function
     Printf.sprintf "CMethodType descriptor_index = %d" (as_int descriptor_index)
 | CInvokeDynamic (bootstrap_method_attr_index, name_and_type_index) -> 
     Printf.sprintf "CInvokeDynamic (bootstrap_method_attr_index = %d, name_and_type_index = %d)" (as_int bootstrap_method_attr_index) (as_int name_and_type_index)
+| CEmpty -> "CEmpty"
 module List = struct
   include List
   let part i =
@@ -179,7 +180,8 @@ let try_get_constant = function
     | None -> Printf.sprintf "unknown kind = %i" kind' |> Error end
   | 16:: a :: b :: r -> Ok (`CMethodType(get_uint16 a b), r)
   | 18:: a :: b :: d :: e :: r -> Ok (`CInvokeDynamic(get_uint16 a b, get_uint16 d e), r)
-  | x :: _ -> Printf.sprintf "usnuported constant tag = %i" x |> Error
+  | x :: _ -> 
+    Printf.sprintf "usnuported constant tag = %i" x |> Error
   | [] ->Error "usnuported constant tag = <empty stream of data>"
 
 let try_get_constants no (data:int list) =
@@ -188,8 +190,19 @@ let try_get_constants no (data:int list) =
         else
             match try_get_constant data with
             | Ok (result, remaining) ->
-                begin match try_get_constants (no - 1) remaining with
-                | Ok (tail, remaining) -> Ok (result::tail, remaining)
+                let results =
+                    match result with
+                    | `CDouble _ | `CLong _ -> 
+                        (*
+                         If a CONSTANT_Long_info or CONSTANT_Double_info structure is the item in the constant_pool table at index n, 
+                         then the next usable item in the pool is located at index n+2. The constant_pool index n+1 must be valid but is considered unusable.
+
+                         In retrospect, making 8-byte constants take two constant pool entries was a poor choice.
+                        *)
+                        [result; `Null]
+                    | x -> [x] in
+                begin match try_get_constants (no - (List.length results)) remaining with
+                | Ok (tail, remaining) -> Ok (results @ tail, remaining)
                 | Error error -> Error error end
             | Error e -> Error e
     in 
@@ -199,25 +212,27 @@ let try_get_constants no (data:int list) =
             let module IntMap = Core.Int.Map in
             let map = IntMap.of_alist_exn data in
             let uint16_to_int = Stdint.Uint16.to_int in
+            let get_string_from_map x =
+                match IntMap.find map ((uint16_to_int x) - 1) with
+                        | Some (`CUtf8 x) -> x
+                        | Some _-> failwith "CString corresponding index has wrong type..." 
+                        | None -> failwith "CString cannot find corresponding index..." in
             IntMap.map map ~f: (function 
                 | `CUtf8 x -> CUtf8 x
                 | `CInteger x -> CInteger x
                 | `CFloat x -> CFloat x
                 | `CLong x -> CLong x
                 | `CDouble x -> CDouble x
-                | `CClass x -> CClass x
-                | `CString x -> 
-                    begin match IntMap.find map ((uint16_to_int x) - 1) with
-                    | Some (`CUtf8 x) -> CString x
-                    | Some _-> failwith "CString corresponding index has wrong type..." 
-                    | None -> failwith "CString cannot find corresponding index..." end
+                | `CClass x -> CClass (get_string_from_map x)
+                | `CString x -> CString (get_string_from_map x)
                 | `CFiledRef (a,b) -> CFiledRef (a,b)
                 | `CMethodRef (a,b) -> CMethodRef (a,b)
                 | `CInterfaceMethodRef (a,b) -> CInterfaceMethodRef (a,b)
                 | `CNameAndType (a,b) -> CNameAndType (a,b)
                 | `CMethodHandle (a,b) -> CMethodHandle (a,b)
                 | `CInvokeDynamic (a,b) -> CInvokeDynamic (a,b)
-                | `CMethodType x -> CMethodType x)
+                | `CMethodType x -> CMethodType x
+                | `Null -> CEmpty)
             |> fun x ->  Ok (x, remaining)
         | Error e -> Error e
         
@@ -237,5 +252,5 @@ let parse_class_file x =
       Ok rem))
   |> get_2u "missing const_pool_count" (fun constant_pool_count rem -> 
         match try_get_constants (constant_pool_count - 1) rem with
-        | Ok (x, _) -> x |> Core.Int.Map.data |> List.map to_str_constant |> String.concat ", " |> Error
+        | Ok (x, _) -> x |> Core.Int.Map.data |> List.map to_str_constant |> String.concat "\n" |> Error
         | Error x -> Error x)
