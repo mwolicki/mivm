@@ -74,7 +74,7 @@ type constant =
 | CFiledRef of class_index * name_and_type_index
 | CMethodRef of class_index * name_and_type_index
 | CInterfaceMethodRef of class_index * name_and_type_index
-| CString of string_index
+| CString of string
 | CInteger of int32
 | CFloat of float
 | CLong of int64
@@ -97,8 +97,8 @@ let to_str_constant = function
     Printf.sprintf "CMethodRef (class_index = %d, name_and_type_index %d)" (as_int class_index) (as_int name_and_type_index)
 | CInterfaceMethodRef (class_index, name_and_type_index) -> 
     Printf.sprintf "CInterfaceMethodRef (class_index = %d, name_and_type_index %d)" (as_int class_index) (as_int name_and_type_index)
-| CString string_index -> 
-    Printf.sprintf "CString (string_index = %d)" (as_int string_index)
+| CString str -> 
+    Printf.sprintf "CString (str = %s)" str
 | CInteger int32 -> 
     Printf.sprintf "CInteger %s" (Int32.to_string int32)
 | CFloat float -> 
@@ -196,15 +196,21 @@ let try_get_constants no (data:int list) =
         match try_get_constants no data with
         | Ok (result, remaining) ->
             let data = result |> List.mapi (fun i x -> i, x) in
-            let map = Core.Int.Map.of_alist_exn data in
-            Core.Int.Map.map map ~f: (function 
+            let module IntMap = Core.Int.Map in
+            let map = IntMap.of_alist_exn data in
+            let uint16_to_int = Stdint.Uint16.to_int in
+            IntMap.map map ~f: (function 
                 | `CUtf8 x -> CUtf8 x
                 | `CInteger x -> CInteger x
                 | `CFloat x -> CFloat x
                 | `CLong x -> CLong x
                 | `CDouble x -> CDouble x
                 | `CClass x -> CClass x
-                | `CString x -> CString x
+                | `CString x -> 
+                    begin match IntMap.find map ((uint16_to_int x) - 1) with
+                    | Some (`CUtf8 x) -> CString x
+                    | Some _-> failwith "CString corresponding index has wrong type..." 
+                    | None -> failwith "CString cannot find corresponding index..." end
                 | `CFiledRef (a,b) -> CFiledRef (a,b)
                 | `CMethodRef (a,b) -> CMethodRef (a,b)
                 | `CInterfaceMethodRef (a,b) -> CInterfaceMethodRef (a,b)
@@ -231,5 +237,5 @@ let parse_class_file x =
       Ok rem))
   |> get_2u "missing const_pool_count" (fun constant_pool_count rem -> 
         match try_get_constants (constant_pool_count - 1) rem with
-        | Ok (x, _) -> x |> Core.Int.Map.to_alist |> List.map (fun (_, x) ->  to_str_constant x) |> String.concat ", " |> Error
+        | Ok (x, _) -> x |> Core.Int.Map.data |> List.map to_str_constant |> String.concat ", " |> Error
         | Error x -> Error x)
