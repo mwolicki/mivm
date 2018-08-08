@@ -91,9 +91,9 @@ let string_to_class_type str =
 
 type constant =
 | CClass of class_type
-| CFiledRef of class_index * name_and_type_index
-| CMethodRef of class_index * name_and_type_index
-| CInterfaceMethodRef of class_index * name_and_type_index
+| CFiledRef of class_type * name_and_type_index
+| CMethodRef of class_type * name_and_type_index
+| CInterfaceMethodRef of class_type * name_and_type_index
 | CString of string
 | CInteger of int32
 | CFloat of float
@@ -206,12 +206,19 @@ let try_get_constants no (data:int list) =
             let data = result |> List.mapi (fun i x -> i, x) in
             let module IntMap = Core.Int.Map in
             let map = IntMap.of_alist_exn data in
-            let uint16_to_int = Stdint.Uint16.to_int in
+            let uint16_to_int (x:Stdint.uint16) = Stdint.Uint16.to_int x in
             let get_string_from_map x =
                 match IntMap.find map ((uint16_to_int x) - 1) with
                         | Some (`CUtf8 x) -> x
-                        | Some _-> failwith "CString corresponding index has wrong type..." 
-                        | None -> failwith "CString cannot find corresponding index..." in
+                        | Some _-> failwith "[CUtf8] Corresponding index has wrong type..." 
+                        | None -> failwith "[CUtf8] Cannot find corresponding index..." in
+            let get_class_info_from_map x =
+                match IntMap.find map ((uint16_to_int x) - 1) with
+                        | Some (`CClass x) -> x
+                        | Some _ -> failwith "[CClass] Corresponding index has wrong type..." 
+                        | None -> failwith "[CClass] Cannot find corresponding index..." in
+            let get_class_info_from_class_index index = 
+                string_to_class_type (get_string_from_map (get_class_info_from_map index)) in
             IntMap.map map ~f: (function 
                 | `CUtf8 x -> CUtf8 x
                 | `CInteger x -> CInteger x
@@ -220,9 +227,9 @@ let try_get_constants no (data:int list) =
                 | `CDouble x -> CDouble x
                 | `CClass x -> CClass (string_to_class_type (get_string_from_map x))
                 | `CString x -> CString (get_string_from_map x)
-                | `CFiledRef (a,b) -> CFiledRef (a,b)
-                | `CMethodRef (a,b) -> CMethodRef (a,b)
-                | `CInterfaceMethodRef (a,b) -> CInterfaceMethodRef (a,b)
+                | `CFiledRef (class_index,b) -> CFiledRef (get_class_info_from_class_index class_index,b)
+                | `CMethodRef (class_index,b) -> CMethodRef (get_class_info_from_class_index class_index,b)
+                | `CInterfaceMethodRef (class_index,b) -> CInterfaceMethodRef (get_class_info_from_class_index class_index,b)
                 | `CNameAndType (a,b) -> CNameAndType (a,b)
                 | `CMethodHandle (a,b) -> CMethodHandle (a,b)
                 | `CInvokeDynamic (a,b) -> CInvokeDynamic (a,b)
