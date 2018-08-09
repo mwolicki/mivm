@@ -139,47 +139,47 @@ let get_int64 a b c d e f g h =
     let (+) = Int64.add in
     ((!@a >> 56) + (!@b >> 48) + (!@c >> 40) + (!@d >> 32) + (!@e >> 24) + (!@f >> 16) + (!@g >> 8) + !@h)
 
-let try_get_constant = function
-  | 1 :: x :: y :: r -> 
-    let len = get_int16 x y in
-    let (str, r) = r |> List.part len in
-    (* this mapping will work only for non-null ASCII chars! *)
-    (`CUtf8 (str |> List.map Char.chr |> List.to_seq |> String.of_seq), r) |> Ok
-
-  | 3:: a :: b :: c :: d :: r -> Ok (`CInteger (get_int32 a b c d), r)
-  | 4:: _a :: _b :: _c :: _d :: r -> Ok (`CFloat 0.0, r) (* TODO *)
-  | 5:: a :: b :: c :: d :: e :: f :: g :: h :: r -> Ok (`CLong(get_int64 a b c d e f g h), r)
-  | 6:: _a :: _b :: _c :: _d :: _e :: _f :: _g :: _h :: r -> Ok (`CDouble 0.0, r)  (* TODO *)
-  | 7:: a :: b :: r -> Ok (`CClass (get_uint16 a b), r)
-  | 8:: a :: b :: r -> Ok (`CString(get_uint16 a b), r)
-  | 9:: a :: b :: d :: e :: r -> Ok (`CFiledRef(get_uint16 a b, get_uint16 d e), r)
-  | 10:: a :: b :: d :: e :: r -> Ok (`CMethodRef(get_uint16 a b, get_uint16 d e), r)
-  | 11:: a :: b :: d :: e :: r -> Ok (`CInterfaceMethodRef(get_uint16 a b, get_uint16 d e), r)
-  | 12:: a :: b :: d :: e :: r -> Ok (`CNameAndType(get_uint16 a b, get_uint16 d e), r)
-  | 15:: kind' :: a :: b :: r -> 
-    let kind = match kind' with
-               | 1 -> Some REF_getField
-               | 2 -> Some REF_getStatic
-               | 3 -> Some REF_putField
-               | 4 -> Some REF_putStatic
-               | 5 -> Some REF_invokeVirtual
-               | 6 -> Some REF_invokeStatic
-               | 7 -> Some REF_invokeSpecial
-               | 8 -> Some REF_newInvokeSpecial
-               | 9 -> Some REF_invokeInterface
-               | _ -> None               
-    in begin match kind with
-    | Some kind -> Ok (`CMethodHandle(kind, get_uint16 a b), r)
-    | None -> Printf.sprintf "unknown kind = %i" kind' |> Error end
-  | 16:: a :: b :: r -> Ok (`CMethodType(get_uint16 a b), r)
-  | 18:: a :: b :: d :: e :: r -> Ok (`CInvokeDynamic(get_uint16 a b, get_uint16 d e), r)
-  | 19:: a :: b :: r -> Ok (`CModule(get_uint16 a b), r)
-  | 20:: a :: b :: r -> Ok (`CPackage(get_uint16 a b), r)
-  | x :: _ -> 
-    Printf.sprintf "unsuported constant tag = %i" x |> Error
-  | [] ->Error "usnuported constant tag = <empty stream of data>"
 
 let try_get_constants no (data:int list) =
+    let try_get_constant = function
+    | 1 :: x :: y :: r -> 
+        let len = get_int16 x y in
+        let (str, r) = r |> List.part len in
+        (* this mapping will work only for non-null ASCII chars! *)
+        (`CUtf8 (str |> List.map Char.chr |> List.to_seq |> String.of_seq), r) |> Ok
+
+    | 3:: a :: b :: c :: d :: r -> Ok (`CInteger (get_int32 a b c d), r)
+    | 4:: _a :: _b :: _c :: _d :: r -> Ok (`CFloat 0.0, r) (* TODO *)
+    | 5:: a :: b :: c :: d :: e :: f :: g :: h :: r -> Ok (`CLong(get_int64 a b c d e f g h), r)
+    | 6:: _a :: _b :: _c :: _d :: _e :: _f :: _g :: _h :: r -> Ok (`CDouble 0.0, r)  (* TODO *)
+    | 7:: a :: b :: r -> Ok (`CClass (get_uint16 a b), r)
+    | 8:: a :: b :: r -> Ok (`CString(get_uint16 a b), r)
+    | 9:: a :: b :: d :: e :: r -> Ok (`CFiledRef(get_uint16 a b, get_uint16 d e), r)
+    | 10:: a :: b :: d :: e :: r -> Ok (`CMethodRef(get_uint16 a b, get_uint16 d e), r)
+    | 11:: a :: b :: d :: e :: r -> Ok (`CInterfaceMethodRef(get_uint16 a b, get_uint16 d e), r)
+    | 12:: a :: b :: d :: e :: r -> Ok (`CNameAndType(get_uint16 a b, get_uint16 d e), r)
+    | 15:: kind' :: a :: b :: r -> 
+        let kind = match kind' with
+                | 1 -> Some REF_getField
+                | 2 -> Some REF_getStatic
+                | 3 -> Some REF_putField
+                | 4 -> Some REF_putStatic
+                | 5 -> Some REF_invokeVirtual
+                | 6 -> Some REF_invokeStatic
+                | 7 -> Some REF_invokeSpecial
+                | 8 -> Some REF_newInvokeSpecial
+                | 9 -> Some REF_invokeInterface
+                | _ -> None               
+        in begin match kind with
+        | Some kind -> Ok (`CMethodHandle(kind, get_uint16 a b), r)
+        | None -> Printf.sprintf "unknown kind = %i" kind' |> Error end
+    | 16:: a :: b :: r -> Ok (`CMethodType(get_uint16 a b), r)
+    | 18:: a :: b :: d :: e :: r -> Ok (`CInvokeDynamic(get_uint16 a b, get_uint16 d e), r)
+    | 19:: a :: b :: r -> Ok (`CModule(get_uint16 a b), r)
+    | 20:: a :: b :: r -> Ok (`CPackage(get_uint16 a b), r)
+    | x :: _ -> 
+        Printf.sprintf "unsuported constant tag = %i" x |> Error
+    | [] ->Error "usnuported constant tag = <empty stream of data>" in
     let rec try_get_constants no (data:int list) =
         if no = 0 then Ok([], data)
         else
